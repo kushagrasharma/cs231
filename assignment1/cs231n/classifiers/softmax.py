@@ -1,6 +1,6 @@
 from builtins import range
 import numpy as np
-from random import shuffle
+from random import shuffle, randrange
 from past.builtins import xrange
 
 def softmax(x, i):
@@ -67,6 +67,17 @@ def softmax_loss_naive(W, X, y, reg):
 
     return loss, dW
 
+def compare_gradients(W, W1, num_checks=10):
+    for i in range(num_checks):
+        ix = tuple([randrange(m) for m in W.shape])
+
+        grad_numerical = W[ix]
+        grad_analytic = W1[ix]
+        rel_error = (abs(grad_numerical - grad_analytic) /
+                    (abs(grad_numerical) + abs(grad_analytic)))
+        print('G1: %f G2: %f, relative error: %e'
+              %(grad_numerical, grad_analytic, rel_error))
+
 
 def softmax_loss_vectorized(W, X, y, reg):
     """
@@ -100,68 +111,23 @@ def softmax_loss_vectorized(W, X, y, reg):
 
     preds = np.matmul(X, W)
 
-    max_score = np.max(preds, 0) # should return Nx1 vector
-    normalized_preds = preds - max_score # broadcast across
+    max_score = np.max(preds, 1) # should return Nx1 vector
+    normalized_preds = (preds.transpose() - max_score).transpose() # broadcast across
     normalized_preds = np.exp(normalized_preds)
     softmax_sums = np.sum(normalized_preds, 1)
     softmax_preds = ((normalized_preds.transpose()) / softmax_sums).transpose()
 
-    class_softmax = softmax_preds[np.arange(len(softmax_preds)), y]
-    class_softmax = -1 * np.log(class_softmax)
+    class_softmax = -1 * np.log(softmax_preds[np.arange(len(softmax_preds)), y])
 
     loss += class_softmax.sum()
     loss /= X.shape[0]
     loss += reg * np.sum(W ** 2)
 
-    # for i in range(X.shape[0]):
-    #     pred = preds[i]
-    #     total_sum = np.sum(np.exp(pred - pred.max()))
-    #     class_sum = np.exp(pred[y[i]] - pred.max())
-    #     L_i = class_sum / total_sum
-    #     loss += -1 * np.log(L_i)
+    ind = np.zeros_like(softmax_preds)
+    ind[np.arange(X.shape[0]), y] = 1
+    dW = X.T.dot(softmax_preds - ind)
 
-    #     dW_i = np.zeros_like(W)
-
-    #     for m in range(W.shape[0]):
-    #         dW_i[m, y[i]] += total_sum * X[i, m] * class_sum
-    #         for n in xrange(W.shape[1]):
-    #             dW_i[m, n] -= class_sum * X[i, m] * np.exp(pred[n] - pred.max())
-
-    #     dW_i /= (total_sum ** 2)
-
-    #     dW_i /= L_i
-
-    #     dW += dW_i
-
-    for i in range(X.shape[0]):
-        dW_i = np.zeros_like(W)
-        dW_i[:, y[i]] = 1
-        dW_i = (dW_i.transpose() * softmax_sums[i] * (X[i] * normalized_preds[i, y[i]])).transpose()
-
-        # original unvectorized code for check
-        pred = preds[i]
-        total_sum = np.sum(np.exp(pred - pred.max()))
-        class_sum = np.exp(pred[y[i]] - pred.max())
-
-        dW_check = np.zeros_like(W)
-
-        for m in range(W.shape[0]):
-            dW_check[m, y[i]] += total_sum * X[i, m] * class_sum
-
-        print("difference bw gradients: ", np.sum(dW_i - dW_check))
-        return dW_i, dW_check
-
-        # vectorized code
-
-        summand = np.ones_like(W)
-        summand *= normalized_preds[i, y[i]]
-        summand = (summand.transpose() * X[i]).transpose()
-        summand *= normalized_preds[i]
-        dW_i -= summand
-        dW_i /= (softmax_sums[i] ** 2)
-        dW += dW_i
-
-    dW /= -1 * X.shape[0]
+    dW /= X.shape[0]
     dW += reg * 2 * W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
